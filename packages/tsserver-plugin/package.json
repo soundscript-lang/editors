@@ -1,0 +1,28 @@
+{
+  "name": "@soundscript/tsserver-plugin",
+  "version": "0.1.15",
+  "main": "index.js",
+  "license": "ISC",
+  "files": [
+    "index.js",
+    "lsp_helper_client.js",
+    "projection_support.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/soundscript-lang/editors.git",
+    "directory": "packages/tsserver-plugin"
+  },
+  "homepage": "https://github.com/soundscript-lang/editors/tree/main/packages/tsserver-plugin",
+  "bugs": {
+    "url": "https://github.com/soundscript-lang/editors/issues"
+  },
+  "peerDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

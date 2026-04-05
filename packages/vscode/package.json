@@ -1,0 +1,117 @@
+{
+  "name": "soundscript-vscode",
+  "displayName": "soundscript",
+  "version": "0.1.15",
+  "publisher": "soundscript",
+  "description": "Language support for soundscript through the TypeScript server plugin path.",
+  "icon": "images/extension-icon.png",
+  "main": "./out/extension.js",
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "package": "npm run compile && node ./package_vsix.cjs",
+    "publish": "npm run compile && node ./package_vsix.cjs publish",
+    "smoke:mixed": "npm run compile && node ./run_vscode_smoke.js",
+    "test": "npm run compile && node --test out/server_resolution.test.js out/editor_process_support.test.js out/document_symbol_mapping.test.js out/document_symbol_tree.test.js out/definition_position_recovery.test.js out/extension_runtime_mode.test.js out/formatting_configuration.test.js out/typescript_plugin_configuration.test.js out/typescript_extension_support.test.js out/package_manifest.test.js out/syntaxes.test.js out/tsserver_bridge_support.test.js out/soundscript_bridge_client.test.js out/soundscript_bridge_fallback.test.js out/soundscript_stdlib_overrides.test.js ../tsserver-plugin/index.test.js ../tsserver-plugin/lsp_helper_client.test.js"
+  },
+  "engines": {
+    "vscode": "^1.105.0"
+  },
+  "activationEvents": [
+    "onLanguage:soundscript",
+    "onCommand:soundscript.restartLanguageServer",
+    "workspaceContains:tsconfig.soundscript.json",
+    "workspaceContains:**/*.sts"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "soundscript.restartLanguageServer",
+        "title": "soundscript: Restart TypeScript Integration"
+      },
+      {
+        "command": "soundscript.dumpActiveDocumentDebugInfo",
+        "title": "soundscript: Dump Active File Debug Info"
+      }
+    ],
+    "languages": [
+      {
+        "id": "soundscript",
+        "aliases": [
+          "soundscript",
+          "soundscript"
+        ],
+        "extensions": [
+          ".sts"
+        ],
+        "icon": {
+          "light": "./images/icon.png",
+          "dark": "./images/icon.png"
+        },
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "soundscript",
+        "scopeName": "source.soundscript",
+        "path": "./syntaxes/soundscript.tmLanguage.json"
+      }
+    ],
+    "typescriptServerPlugins": [
+      {
+        "configNamespace": "soundscript",
+        "languages": [
+          "javascript",
+          "javascriptreact",
+          "typescript",
+          "typescriptreact"
+        ],
+        "name": "@soundscript/tsserver-plugin",
+        "enableForWorkspaceTypeScriptVersions": true
+      }
+    ],
+    "configuration": {
+      "title": "soundscript",
+      "properties": {
+        "soundscript.tsserver.stsScriptKind": {
+          "type": "string",
+          "enum": [
+            "ts",
+            "tsx"
+          ],
+          "default": "ts",
+          "description": "Script kind the soundscript tsserver plugin uses when exposing .sts files to TypeScript."
+        }
+      }
+    }
+  },
+  "keywords": [
+    "soundscript",
+    "typescript",
+    "sts"
+  ],
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "commonjs",
+  "categories": [
+    "Programming Languages"
+  ],
+  "homepage": "https://github.com/soundscript-lang/editors/tree/main/packages/vscode",
+  "bugs": {
+    "url": "https://github.com/soundscript-lang/editors/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/soundscript-lang/editors.git",
+    "directory": "packages/vscode"
+  },
+  "dependencies": {
+    "@soundscript/tsserver-plugin": "^0.1.15",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.6.2",
+    "@types/node": "^25.3.5",
+    "@types/vscode": "^1.109.0"
+  }
+}

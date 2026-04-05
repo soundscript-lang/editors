@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 110 110">
+  <g transform="translate(5, 5)">
+    <path d="M 50 5 V 100 C 50 100, 5 85, 5 60 V 20 Z" fill="#A855F7" />
+    <path d="M 50 5 V 100 C 50 100, 95 85, 95 60 V 20 Z" fill="#7E22CE" />
+    <text
+      x="50"
+      y="76"
+      text-anchor="middle"
+      font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+      font-size="62"
+      font-weight="900"
+      fill="#FFFFFF"
+    >
+      S
+    </text>
+    <rect x="70" y="68" width="26" height="18" rx="3" fill="#E9D5FF" />
+    <text
+      x="83"
+      y="82"
+      text-anchor="middle"
+      font-family="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+      font-size="13"
+      font-weight="900"
+      fill="#4C1D95"
+    >
+      ts
+    </text>
+  </g>
+</svg>

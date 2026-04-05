@@ -1,0 +1,18 @@
+{
+  "name": "@soundscript/editors-workspace",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "npm run test:versions && npm run test:release && npm run test --workspaces --if-present && npm run test:pack:tsserver-plugin",
+    "test:versions": "node ./scripts/verify_release_versions.mjs",
+    "test:release": "node --test ./scripts/publish_packages.test.mjs ./scripts/publish_openvsx.test.mjs",
+    "package:vscode": "npm --workspace soundscript-vscode run package && node ./scripts/verify_vsix_contents.mjs",
+    "test:vscode": "npm --workspace soundscript-vscode test",
+    "test:tsserver-plugin": "node --test packages/tsserver-plugin/index.test.js packages/tsserver-plugin/lsp_helper_client.test.js",
+    "test:pack:tsserver-plugin": "node ./scripts/verify_tsserver_plugin_pack.mjs",
+    "release:publish": "node ./scripts/publish_packages.mjs",
+    "release:publish:openvsx": "node ./scripts/publish_openvsx.mjs"
+  }
+}

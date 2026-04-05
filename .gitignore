@@ -1,0 +1,5 @@
+node_modules/
+packages/vscode/out/
+packages/vscode/*.vsix
+.DS_Store
+*.tgz

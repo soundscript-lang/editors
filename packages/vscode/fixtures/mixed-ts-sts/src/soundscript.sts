@@ -1,0 +1,70 @@
+// #[interop]
+import { type Environment, literalSchema, answer, a } from './types.ts';
+import { parseJson } from 'sts:json';
+
+console.log(literalSchema);
+console.log(answer);
+console.log(a);
+void parseJson;
+
+const env: Environment = { mode: 'dev' };
+console.log(env.mode);
+
+function readPrelude(value: Result<number, string>) {
+  return Try(value);
+}
+
+function safeDivide(divisor: number, denominator: number): Result<number, string> {
+  if (denominator === 0) {
+    return err('divide_by_zero');
+  }
+  return ok(divisor / denominator);
+}
+
+function tryDivision() {
+  const value = Try(safeDivide(10, 0));
+  return value;
+}
+
+function matchDivision() {
+  return Match(safeDivide(10, 0), [
+    ({ value }: Ok<number>) => true,
+    ({ err }: Err<string>) => false,
+  ]);
+}
+
+const unwrapped = readPrelude(ok(1));
+const matched = Match(ok(1), [(value: number) => value, (_) => 0]);
+Defer(() => {});
+console.log(unwrapped);
+console.log(tryDivision());
+console.log(matched);
+console.log(matchDivision());
+
+const dict = Object.create(null);
+console.log(dict);
+
+try {
+  throw new Error('boom');
+} catch (err) {
+  console.log(err);
+}
+
+class B {
+  type: string;
+
+  constructor() {
+    this.type = 'b';
+  }
+}
+
+class C {
+  type: string;
+
+  constructor() {
+    this.type = 'c';
+  }
+}
+
+const b = new B();
+const c: C = b;

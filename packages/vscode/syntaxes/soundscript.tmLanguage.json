@@ -1,0 +1,194 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "soundscript",
+  "scopeName": "source.soundscript",
+  "patterns": [
+    {
+      "include": "#annotation-comment"
+    },
+    {
+      "include": "#dsl-tag"
+    },
+    {
+      "include": "#builtin-macro-call"
+    },
+    {
+      "include": "source.ts"
+    }
+  ],
+  "repository": {
+    "annotation-comment": {
+      "patterns": [
+        {
+          "name": "comment.line.annotation.soundscript",
+          "begin": "(//\\s*)(#\\[)",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.comment.soundscript"
+            },
+            "2": {
+              "name": "punctuation.definition.annotation.begin.soundscript"
+            }
+          },
+          "end": "(\\])",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.annotation.end.soundscript"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#annotation-arguments"
+            },
+            {
+              "include": "#annotation-builtins"
+            },
+            {
+              "include": "#annotation-name"
+            },
+            {
+              "name": "punctuation.separator.annotation.soundscript",
+              "match": ","
+            }
+          ]
+        }
+      ]
+    },
+    "annotation-arguments": {
+      "patterns": [
+        {
+          "name": "meta.annotation.arguments.soundscript",
+          "begin": "\\(",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.section.group.begin.annotation.soundscript"
+            }
+          },
+          "end": "\\)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.group.end.annotation.soundscript"
+            }
+          },
+          "patterns": [
+            {
+              "name": "punctuation.separator.annotation.soundscript",
+              "match": ","
+            },
+            {
+              "name": "punctuation.accessor.dot.soundscript",
+              "match": "\\."
+            },
+            {
+              "name": "constant.language.boolean.soundscript",
+              "match": "\\b(?:true|false|null|undefined)\\b"
+            },
+            {
+              "name": "constant.numeric.annotation.soundscript",
+              "match": "\\b\\d+(?:_\\d+)*(?:\\.\\d+(?:_\\d+)*)?\\b"
+            },
+            {
+              "name": "string.quoted.double.soundscript",
+              "begin": "\"",
+              "beginCaptures": {
+                "0": {
+                  "name": "punctuation.definition.string.begin.soundscript"
+                }
+              },
+              "end": "\"",
+              "endCaptures": {
+                "0": {
+                  "name": "punctuation.definition.string.end.soundscript"
+                }
+              },
+              "patterns": [
+                {
+                  "name": "constant.character.escape.soundscript",
+                  "match": "\\\\."
+                }
+              ]
+            },
+            {
+              "name": "string.quoted.single.soundscript",
+              "begin": "'",
+              "beginCaptures": {
+                "0": {
+                  "name": "punctuation.definition.string.begin.soundscript"
+                }
+              },
+              "end": "'",
+              "endCaptures": {
+                "0": {
+                  "name": "punctuation.definition.string.end.soundscript"
+                }
+              },
+              "patterns": [
+                {
+                  "name": "constant.character.escape.soundscript",
+                  "match": "\\\\."
+                }
+              ]
+            },
+            {
+              "name": "string.quoted.template.soundscript",
+              "begin": "`",
+              "beginCaptures": {
+                "0": {
+                  "name": "punctuation.definition.string.begin.soundscript"
+                }
+              },
+              "end": "`",
+              "endCaptures": {
+                "0": {
+                  "name": "punctuation.definition.string.end.soundscript"
+                }
+              },
+              "patterns": [
+                {
+                  "name": "constant.character.escape.soundscript",
+                  "match": "\\\\."
+                }
+              ]
+            },
+            {
+              "name": "variable.parameter.annotation.soundscript",
+              "match": "\\b[A-Za-z_$][A-Za-z0-9_$-]*\\b"
+            }
+          ]
+        }
+      ]
+    },
+    "annotation-builtins": {
+      "patterns": [
+        {
+          "name": "support.type.annotation.soundscript",
+          "match": "\\b(?:unsafe|interop|extern|variance|newtype|value)\\b(?=\\s*(?:\\(|,|\\]))"
+        }
+      ]
+    },
+    "annotation-name": {
+      "patterns": [
+        {
+          "name": "entity.name.type.annotation.soundscript",
+          "match": "\\b[A-Za-z_$][A-Za-z0-9_$-]*(?:\\.[A-Za-z_$][A-Za-z0-9_$-]*)*\\b(?=\\s*(?:\\(|,|\\]))"
+        }
+      ]
+    },
+    "builtin-macro-call": {
+      "patterns": [
+        {
+          "name": "support.function.macro.soundscript",
+          "match": "(?<![\\w$.])(Try|Match|Defer|Do)(?=\\s*\\()"
+        }
+      ]
+    },
+    "dsl-tag": {
+      "patterns": [
+        {
+          "name": "entity.name.function.tagged-template.soundscript",
+          "match": "(?<![\\w$.])(sql|css|graphql)(?=\\s*`)"
+        }
+      ]
+    }
+  }
+}

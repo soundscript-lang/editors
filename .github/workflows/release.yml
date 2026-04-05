@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      HAS_VSCE_PAT: ${{ secrets.VSCE_PAT != '' }}
+      HAS_OVSX_PAT: ${{ secrets.OVSX_PAT != '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -48,22 +50,22 @@ jobs:
           gh release upload "$RELEASE_TAG" "$VSIX_PATH" --clobber
 
       - name: Publish to Visual Studio Marketplace
-        if: ${{ secrets.VSCE_PAT != '' }}
+        if: ${{ env.HAS_VSCE_PAT == 'true' }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: npm --workspace soundscript-vscode run publish
 
       - name: Marketplace secret missing
-        if: ${{ secrets.VSCE_PAT == '' }}
+        if: ${{ env.HAS_VSCE_PAT != 'true' }}
         run: echo "VSCE_PAT is not configured; skipping Visual Studio Marketplace publish."
 
       - name: Publish to OpenVSX
-        if: ${{ secrets.OVSX_PAT != '' }}
+        if: ${{ env.HAS_OVSX_PAT == 'true' }}
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
           SOUNDSCRIPT_SKIP_PACKAGE_VSCODE: '1'
         run: npm run release:publish:openvsx
 
       - name: OpenVSX secret missing
-        if: ${{ secrets.OVSX_PAT == '' }}
+        if: ${{ env.HAS_OVSX_PAT != 'true' }}
         run: echo "OVSX_PAT is not configured; skipping OpenVSX publish."

@@ -49,3 +49,8 @@ OpenVSX / Cursor flow:
 
 `release:publish:openvsx` will build the VSIX first unless
 `SOUNDSCRIPT_SKIP_PACKAGE_VSCODE=1` is set. It also accepts `OVSX_PAT=<token>`.
+
+GitHub Actions also supports release-time extension publishing. Configure
+`VSCE_PAT` for the Visual Studio Marketplace and `OVSX_PAT` for OpenVSX in the
+`editors` repo secrets, then run the `Release Extension` workflow for an
+existing tag if you need to backfill a release.

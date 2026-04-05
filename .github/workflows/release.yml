@@ -1,0 +1,81 @@
+name: Release Extension
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to upload and publish
+        required: true
+        type: string
+      publish_marketplace:
+        description: Publish the VS Code extension to the Visual Studio Marketplace
+        required: true
+        default: true
+        type: boolean
+      publish_openvsx:
+        description: Publish the VSIX to OpenVSX
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release-extension:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      SHOULD_PUBLISH_MARKETPLACE: ${{ github.event_name == 'release' || inputs.publish_marketplace }}
+      SHOULD_PUBLISH_OPENVSX: ${{ github.event_name == 'release' || inputs.publish_openvsx }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: soundscript-lang/soundscript
+          path: soundscript
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build and verify the VSIX
+        run: npm run package:vscode
+
+      - name: Upload VSIX to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VSIX_PATH="$(echo packages/vscode/soundscript-vscode-*.vsix)"
+          gh release upload "$RELEASE_TAG" "$VSIX_PATH" --clobber
+
+      - name: Publish to Visual Studio Marketplace
+        if: ${{ env.SHOULD_PUBLISH_MARKETPLACE == 'true' && secrets.VSCE_PAT != '' }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npm --workspace soundscript-vscode run publish
+
+      - name: Marketplace secret missing
+        if: ${{ env.SHOULD_PUBLISH_MARKETPLACE == 'true' && secrets.VSCE_PAT == '' }}
+        run: echo "VSCE_PAT is not configured; skipping Visual Studio Marketplace publish."
+
+      - name: Publish to OpenVSX
+        if: ${{ env.SHOULD_PUBLISH_OPENVSX == 'true' && secrets.OVSX_PAT != '' }}
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          SOUNDSCRIPT_SKIP_PACKAGE_VSCODE: '1'
+        run: npm run release:publish:openvsx
+
+      - name: OpenVSX secret missing
+        if: ${{ env.SHOULD_PUBLISH_OPENVSX == 'true' && secrets.OVSX_PAT == '' }}
+        run: echo "OVSX_PAT is not configured; skipping OpenVSX publish."

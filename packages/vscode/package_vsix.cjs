@@ -11,6 +11,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.j
 function resolveSoundLibsRoot() {
   const candidates = [
     path.join(packageRoot, 'sound-libs'),
+    path.resolve(packageRoot, '..', '..', 'soundscript', 'src', 'bundled', 'sound-libs'),
     path.resolve(packageRoot, '..', '..', '..', 'soundscript', 'src', 'bundled', 'sound-libs'),
     path.resolve(packageRoot, '..', '..', '..', '..', 'soundscript', 'src', 'bundled', 'sound-libs'),
   ];

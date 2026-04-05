@@ -24,7 +24,7 @@ Development mode expects a sibling `/soundscript` checkout under the same `sound
 
 Release flow:
 
-1. Confirm `@soundscript/soundscript@0.1.3` is already published.
+1. Confirm `@soundscript/soundscript@0.1.17` is already published.
 2. Run `npm test`.
 3. Run `npm run package:vscode`.
 4. Publish with `npm run release:publish`.

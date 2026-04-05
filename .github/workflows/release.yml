@@ -10,16 +10,6 @@ on:
         description: Existing release tag to upload and publish
         required: true
         type: string
-      publish_marketplace:
-        description: Publish the VS Code extension to the Visual Studio Marketplace
-        required: true
-        default: true
-        type: boolean
-      publish_openvsx:
-        description: Publish the VSIX to OpenVSX
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: write
@@ -29,8 +19,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
-      SHOULD_PUBLISH_MARKETPLACE: ${{ github.event_name == 'release' || inputs.publish_marketplace }}
-      SHOULD_PUBLISH_OPENVSX: ${{ github.event_name == 'release' || inputs.publish_openvsx }}
 
     steps:
       - uses: actions/checkout@v4
@@ -60,22 +48,22 @@ jobs:
           gh release upload "$RELEASE_TAG" "$VSIX_PATH" --clobber
 
       - name: Publish to Visual Studio Marketplace
-        if: ${{ env.SHOULD_PUBLISH_MARKETPLACE == 'true' && secrets.VSCE_PAT != '' }}
+        if: ${{ secrets.VSCE_PAT != '' }}
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
         run: npm --workspace soundscript-vscode run publish
 
       - name: Marketplace secret missing
-        if: ${{ env.SHOULD_PUBLISH_MARKETPLACE == 'true' && secrets.VSCE_PAT == '' }}
+        if: ${{ secrets.VSCE_PAT == '' }}
         run: echo "VSCE_PAT is not configured; skipping Visual Studio Marketplace publish."
 
       - name: Publish to OpenVSX
-        if: ${{ env.SHOULD_PUBLISH_OPENVSX == 'true' && secrets.OVSX_PAT != '' }}
+        if: ${{ secrets.OVSX_PAT != '' }}
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
           SOUNDSCRIPT_SKIP_PACKAGE_VSCODE: '1'
         run: npm run release:publish:openvsx
 
       - name: OpenVSX secret missing
-        if: ${{ env.SHOULD_PUBLISH_OPENVSX == 'true' && secrets.OVSX_PAT == '' }}
+        if: ${{ secrets.OVSX_PAT == '' }}
         run: echo "OVSX_PAT is not configured; skipping OpenVSX publish."

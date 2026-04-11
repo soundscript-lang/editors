@@ -1,3 +1,5 @@
+import { isLocalSoundscriptFile } from './editor_process_support';
+
 export interface DocumentLike {
   languageId: string;
   uri: unknown;
@@ -30,11 +32,29 @@ function pickSoundscriptDocumentFileArgument(
   documents: readonly DocumentLike[],
   activeDocument?: DocumentLike,
 ): unknown {
-  if (activeDocument?.languageId === 'soundscript') {
+  if (
+    activeDocument?.languageId === 'soundscript' ||
+    (
+      activeDocument?.uri &&
+      typeof activeDocument.uri === 'object' &&
+      'fsPath' in activeDocument.uri &&
+      typeof activeDocument.uri.fsPath === 'string' &&
+      isLocalSoundscriptFile(activeDocument.uri.fsPath)
+    )
+  ) {
     return toTsServerFileArgument(activeDocument.uri);
   }
 
-  const matchingDocument = documents.find((document) => document.languageId === 'soundscript');
+  const matchingDocument = documents.find((document) =>
+    document.languageId === 'soundscript' ||
+    (
+      document.uri &&
+      typeof document.uri === 'object' &&
+      'fsPath' in document.uri &&
+      typeof document.uri.fsPath === 'string' &&
+      isLocalSoundscriptFile(document.uri.fsPath)
+    )
+  );
   return matchingDocument ? toTsServerFileArgument(matchingDocument.uri) : undefined;
 }
 

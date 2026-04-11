@@ -11,6 +11,7 @@ type TypeScriptServerPluginContribution = {
 };
 
 function readPackageJson(): {
+  activationEvents?: string[];
   icon?: string;
   engines?: {
     vscode?: string;
@@ -34,6 +35,7 @@ function readPackageJson(): {
   return JSON.parse(
     readFileSync(join(__dirname, '..', 'package.json'), 'utf8'),
   ) as {
+    activationEvents?: string[];
     icon?: string;
     engines?: {
       vscode?: string;
@@ -55,6 +57,11 @@ function readPackageJson(): {
     };
   };
 }
+
+test('VS Code package activates for tsconfig.json workspaces that may use soundscript.include', () => {
+  const packageJson = readPackageJson();
+  assert.equal(packageJson.activationEvents?.includes('workspaceContains:**/tsconfig.json'), true);
+});
 
 test('VS Code package contributes the Soundscript tsserver plugin for JS/TS workspaces', () => {
   const packageJson = readPackageJson();

@@ -17,7 +17,6 @@ const DEFAULT_CONFIGURATION = {
   soundscriptCommand: undefined,
   stsScriptKind: 'ts',
 };
-const STS_EXTENSION = '.sts';
 const ANNOTATION_COMMENT_PATTERN = /\/\/\s*#\[([A-Za-z_$][A-Za-z0-9_$]*)\]/g;
 
 function normalizeStringArray(value) {
@@ -60,10 +59,6 @@ function stringArraysEqual(left, right) {
   }
 
   return true;
-}
-
-function isSoundscriptSourceFile(fileName) {
-  return fileName.endsWith(STS_EXTENSION);
 }
 
 function collectAnnotationMacroNames(sourceText) {
@@ -196,6 +191,7 @@ function clearProjectedState(state) {
     }
   }
   state.projectedByFile.clear();
+  state.projectSoundscriptMatcherByProjectPath.clear();
 }
 
 function createLanguageServiceProxy(
@@ -240,12 +236,10 @@ function createLanguageServiceProxy(
   }
 
   proxy.getSemanticDiagnostics = (fileName) => {
-    if (isSoundscriptSourceFile(fileName)) {
-      const projected = getProjected(fileName);
-      if (projected) {
-        return projected.service.getSemanticDiagnostics(projected.lookupFileName)
-          .map((diagnostic) => remapDiagnostic(ts, projected.preparedFile, diagnostic));
-      }
+    const projected = getProjected(fileName);
+    if (projected) {
+      return projected.service.getSemanticDiagnostics(projected.lookupFileName)
+        .map((diagnostic) => remapDiagnostic(ts, projected.preparedFile, diagnostic));
     }
     return filterAnnotationMacroImportDiagnostics(
       ts,
@@ -262,74 +256,66 @@ function createLanguageServiceProxy(
       languageService.getSuggestionDiagnostics(fileName),
     );
   proxy.getQuickInfoAtPosition = (fileName, position) => {
-    if (isSoundscriptSourceFile(fileName)) {
-      const projected = getProjected(fileName);
-      if (projected) {
-        const mappedPosition = mapSourcePositionToProjected(projected.preparedFile, position).position;
-        const quickInfo = projected.service.getQuickInfoAtPosition(
-          projected.lookupFileName,
-          mappedPosition,
-        );
-        if (quickInfo) {
-          return {
-            ...quickInfo,
-            textSpan: remapTextSpan(ts, projected.preparedFile, quickInfo.textSpan),
-          };
-        }
+    const projected = getProjected(fileName);
+    if (projected) {
+      const mappedPosition = mapSourcePositionToProjected(projected.preparedFile, position).position;
+      const quickInfo = projected.service.getQuickInfoAtPosition(
+        projected.lookupFileName,
+        mappedPosition,
+      );
+      if (quickInfo) {
+        return {
+          ...quickInfo,
+          textSpan: remapTextSpan(ts, projected.preparedFile, quickInfo.textSpan),
+        };
       }
     }
 
     return languageService.getQuickInfoAtPosition(fileName, position);
   };
   proxy.getDefinitionAtPosition = (fileName, position) => {
-    if (isSoundscriptSourceFile(fileName)) {
-      const projected = getProjected(fileName);
-      if (projected) {
-        const mappedPosition = mapSourcePositionToProjected(projected.preparedFile, position).position;
-        const definitions = projected.service.getDefinitionAtPosition(
-          projected.lookupFileName,
-          mappedPosition,
+    const projected = getProjected(fileName);
+    if (projected) {
+      const mappedPosition = mapSourcePositionToProjected(projected.preparedFile, position).position;
+      const definitions = projected.service.getDefinitionAtPosition(
+        projected.lookupFileName,
+        mappedPosition,
+      );
+      if (definitions) {
+        return definitions.map((definition) =>
+          remapDefinitionInfo(ts, fileName, projected.preparedFile, definition, projected.projection)
         );
-        if (definitions) {
-          return definitions.map((definition) =>
-            remapDefinitionInfo(ts, fileName, projected.preparedFile, definition, projected.projection)
-          );
-        }
       }
     }
 
     return languageService.getDefinitionAtPosition(fileName, position);
   };
   proxy.getCompletionsAtPosition = (fileName, position, options) => {
-    if (isSoundscriptSourceFile(fileName)) {
-      const projected = getProjected(fileName);
-      if (projected) {
-        const mappedPosition = mapSourcePositionToProjected(projected.preparedFile, position).position;
-        return projected.service.getCompletionsAtPosition(
-          projected.lookupFileName,
-          mappedPosition,
-          options,
-        );
-      }
+    const projected = getProjected(fileName);
+    if (projected) {
+      const mappedPosition = mapSourcePositionToProjected(projected.preparedFile, position).position;
+      return projected.service.getCompletionsAtPosition(
+        projected.lookupFileName,
+        mappedPosition,
+        options,
+      );
     }
 
     return languageService.getCompletionsAtPosition(fileName, position, options);
   };
   proxy.getCompletionEntryDetails = (fileName, position, entryName, formatOptions, source, preferences, data) => {
-    if (isSoundscriptSourceFile(fileName)) {
-      const projected = getProjected(fileName);
-      if (projected) {
-        const mappedPosition = mapSourcePositionToProjected(projected.preparedFile, position).position;
-        return projected.service.getCompletionEntryDetails(
-          projected.lookupFileName,
-          mappedPosition,
-          entryName,
-          formatOptions,
-          source,
-          preferences,
-          data,
-        );
-      }
+    const projected = getProjected(fileName);
+    if (projected) {
+      const mappedPosition = mapSourcePositionToProjected(projected.preparedFile, position).position;
+      return projected.service.getCompletionEntryDetails(
+        projected.lookupFileName,
+        mappedPosition,
+        entryName,
+        formatOptions,
+        source,
+        preferences,
+        data,
+      );
     }
 
     return languageService.getCompletionEntryDetails(
@@ -343,23 +329,21 @@ function createLanguageServiceProxy(
     );
   };
   proxy.getSignatureHelpItems = (fileName, position, options) => {
-    if (isSoundscriptSourceFile(fileName)) {
-      const projected = getProjected(fileName);
-      if (projected) {
-        const mappedPosition = mapSourcePositionToProjected(projected.preparedFile, position).position;
-        const items = projected.service.getSignatureHelpItems(
-          projected.lookupFileName,
-          mappedPosition,
-          options,
-        );
-        if (items?.applicableSpan) {
-          return {
-            ...items,
-            applicableSpan: remapTextSpan(ts, projected.preparedFile, items.applicableSpan),
-          };
-        }
-        return items;
+    const projected = getProjected(fileName);
+    if (projected) {
+      const mappedPosition = mapSourcePositionToProjected(projected.preparedFile, position).position;
+      const items = projected.service.getSignatureHelpItems(
+        projected.lookupFileName,
+        mappedPosition,
+        options,
+      );
+      if (items?.applicableSpan) {
+        return {
+          ...items,
+          applicableSpan: remapTextSpan(ts, projected.preparedFile, items.applicableSpan),
+        };
       }
+      return items;
     }
 
     return languageService.getSignatureHelpItems(fileName, position, options);
@@ -380,7 +364,10 @@ module.exports = function init(modules) {
     create(info) {
       configuration = normalizeConfiguration(info.config ?? configuration);
       const log = createPluginLogger(info);
-      const state = { projectedByFile: new Map() };
+      const state = {
+        projectSoundscriptMatcherByProjectPath: new Map(),
+        projectedByFile: new Map(),
+      };
       log(
         `plugin create: project=${info.project.getProjectName?.() ?? info.project.projectName ?? 'unknown'} command=${
           configuration.soundscriptCommand ?? 'unresolved'

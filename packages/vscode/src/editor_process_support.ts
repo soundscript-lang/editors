@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import * as path from 'node:path';
+import ts from 'typescript';
 
 import type { ResolvedCliLaunch } from './server_resolution';
 
@@ -40,6 +41,103 @@ export type SpawnDiagnosticsWorker = (
   args: readonly string[],
   options: { cwd: string; stdio: ['pipe', 'pipe', 'pipe'] },
 ) => DiagnosticsWorkerChildProcess;
+
+const DEFAULT_CONFIG_EXCLUDE_PATTERNS = [
+  'node_modules',
+  'bower_components',
+  'jspm_packages',
+  '.git',
+] as const;
+const projectSoundscriptMatcherCache = new Map<string, (filePath: string) => boolean>();
+const tsWildcardApi = ts as typeof ts & {
+  getRegularExpressionForWildcard(
+    specs: readonly string[],
+    basePath: string,
+    usage: 'exclude' | 'files',
+  ): string | undefined;
+};
+
+function normalizePathForMatching(filePath: string): string {
+  return path.resolve(filePath).replace(/\\/gu, '/');
+}
+
+function isSoundscriptSourceFile(filePath: string): boolean {
+  return filePath.endsWith('.sts');
+}
+
+function isTypeScriptFamilySoundscriptAliasFile(filePath: string): boolean {
+  const lowered = filePath.toLowerCase();
+  return (
+    lowered.endsWith('.ts') ||
+    lowered.endsWith('.tsx') ||
+    lowered.endsWith('.mts') ||
+    lowered.endsWith('.cts')
+  ) && !(
+    lowered.endsWith('.d.ts') ||
+    lowered.endsWith('.d.mts') ||
+    lowered.endsWith('.d.cts')
+  );
+}
+
+function createProjectSoundscriptMatcher(projectPath: string): (filePath: string) => boolean {
+  const configFile = ts.readConfigFile(projectPath, ts.sys.readFile);
+  if (configFile.error) {
+    return () => false;
+  }
+
+  const rawConfig = configFile.config as {
+    exclude?: readonly string[];
+    soundscript?: {
+      include?: readonly string[];
+    };
+  } | undefined;
+  const includePatterns = Array.isArray(rawConfig?.soundscript?.include)
+    ? rawConfig.soundscript.include.filter((value): value is string => typeof value === 'string')
+    : [];
+  if (includePatterns.length === 0) {
+    return () => false;
+  }
+
+  const basePath = normalizePathForMatching(path.dirname(projectPath));
+  const includePatternText = tsWildcardApi.getRegularExpressionForWildcard(
+    includePatterns,
+    basePath,
+    'files',
+  );
+  if (!includePatternText) {
+    return () => false;
+  }
+
+  const excludePatterns = Array.isArray(rawConfig?.exclude)
+    ? rawConfig.exclude.filter((value): value is string => typeof value === 'string')
+    : [...DEFAULT_CONFIG_EXCLUDE_PATTERNS];
+  const excludePatternText = excludePatterns.length > 0
+    ? tsWildcardApi.getRegularExpressionForWildcard(excludePatterns, basePath, 'exclude')
+    : undefined;
+  const includeRegex = new RegExp(includePatternText);
+  const excludeRegex = excludePatternText ? new RegExp(excludePatternText) : undefined;
+
+  return (filePath: string): boolean => {
+    if (!isTypeScriptFamilySoundscriptAliasFile(filePath)) {
+      return false;
+    }
+
+    const normalizedFilePath = normalizePathForMatching(filePath);
+    return includeRegex.test(normalizedFilePath) && !(excludeRegex?.test(normalizedFilePath) ?? false);
+  };
+}
+
+function getProjectSoundscriptMatcher(projectPath: string): (filePath: string) => boolean {
+  const normalizedProjectPath = path.resolve(projectPath);
+  const cached = projectSoundscriptMatcherCache.get(normalizedProjectPath);
+  if (cached) {
+    return cached;
+  }
+
+  const matcher = createProjectSoundscriptMatcher(normalizedProjectPath);
+  projectSoundscriptMatcherCache.set(normalizedProjectPath, matcher);
+  return matcher;
+}
 
 export function buildCliArgs(
   cliLaunch: ResolvedCliLaunch,
@@ -118,6 +216,23 @@ export function findNearestSoundscriptProject(filePath: string): string | undefi
     }
     currentDirectory = parentDirectory;
   }
+}
+
+export function isLocalSoundscriptFile(filePath: string): boolean {
+  if (isSoundscriptSourceFile(filePath)) {
+    return true;
+  }
+
+  if (!isTypeScriptFamilySoundscriptAliasFile(filePath)) {
+    return false;
+  }
+
+  const projectPath = findNearestSoundscriptProject(filePath);
+  if (!projectPath) {
+    return false;
+  }
+
+  return getProjectSoundscriptMatcher(projectPath)(filePath);
 }
 
 export function runEditorProjectSnapshot(

@@ -14,7 +14,7 @@ import {
   resolveWorkspaceSoundscriptPackage,
 } from './server_resolution';
 
-const MINIMUM_SUPPORTED_WORKSPACE_SOUNDSCRIPT_VERSION = '0.1.3';
+const MINIMUM_SUPPORTED_WORKSPACE_SOUNDSCRIPT_VERSION = '0.1.25';
 
 export interface SoundscriptCliCompatibilityIssue {
   detectedVersion: string;

@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
   buildEditorProjectArgs,
   buildDiagnosticsWorkerArgs,
+  isLocalSoundscriptFile,
 } from './editor_process_support';
 
 test('buildDiagnosticsWorkerArgs inserts the Deno heap flag after run', () => {
@@ -75,4 +79,55 @@ test('buildEditorProjectArgs inserts the Deno heap flag after run', () => {
       '--stdin-file',
     ],
   );
+});
+
+test('isLocalSoundscriptFile matches configured TypeScript files from soundscript.include', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'soundscript-editors-'));
+  try {
+    mkdirSync(join(workspace, 'src', 'nested'), { recursive: true });
+    writeFileSync(
+      join(workspace, 'tsconfig.json'),
+      JSON.stringify({
+        soundscript: {
+          include: ['src/**/*.ts', 'src/**/*.d.ts'],
+        },
+      }),
+    );
+    writeFileSync(join(workspace, 'src', 'nested', 'main.ts'), 'export const answer = 1;\n');
+    writeFileSync(join(workspace, 'src', 'nested', 'types.d.ts'), 'export declare const answer: 1;\n');
+
+    assert.equal(
+      isLocalSoundscriptFile(join(workspace, 'src', 'nested', 'main.ts')),
+      true,
+    );
+    assert.equal(
+      isLocalSoundscriptFile(join(workspace, 'src', 'nested', 'types.d.ts')),
+      false,
+    );
+  } finally {
+    rmSync(workspace, { force: true, recursive: true });
+  }
+});
+
+test('isLocalSoundscriptFile ignores unmatched TypeScript files', () => {
+  const workspace = mkdtempSync(join(tmpdir(), 'soundscript-editors-'));
+  try {
+    mkdirSync(join(workspace, 'src', 'plain'), { recursive: true });
+    writeFileSync(
+      join(workspace, 'tsconfig.json'),
+      JSON.stringify({
+        soundscript: {
+          include: ['src/sound/**/*.ts'],
+        },
+      }),
+    );
+    writeFileSync(join(workspace, 'src', 'plain', 'main.ts'), 'export const answer = 1;\n');
+
+    assert.equal(
+      isLocalSoundscriptFile(join(workspace, 'src', 'plain', 'main.ts')),
+      false,
+    );
+  } finally {
+    rmSync(workspace, { force: true, recursive: true });
+  }
 });

@@ -1,7 +1,7 @@
 {
   "name": "soundscript-vscode",
   "displayName": "soundscript",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "publisher": "soundscript",
   "description": "Language support for soundscript through the TypeScript server plugin path.",
   "icon": "images/extension-icon.png",
@@ -21,6 +21,7 @@
     "onLanguage:soundscript",
     "onCommand:soundscript.restartLanguageServer",
     "workspaceContains:tsconfig.soundscript.json",
+    "workspaceContains:**/tsconfig.json",
     "workspaceContains:**/*.sts"
   ],
   "contributes": {
@@ -106,7 +107,7 @@
     "directory": "packages/vscode"
   },
   "dependencies": {
-    "@soundscript/tsserver-plugin": "^0.1.15",
+    "@soundscript/tsserver-plugin": "^0.1.16",
     "typescript": "^5.9.3"
   },
   "devDependencies": {

@@ -5,6 +5,12 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const MAX_BUFFER_BYTES = 16 * 1024 * 1024;
+const DEFAULT_CONFIG_EXCLUDE_PATTERNS = [
+  'node_modules',
+  'bower_components',
+  'jspm_packages',
+  '.git',
+];
 
 function isDenoCommand(command) {
   const normalizedCommand = String(command).replace(/\\/gu, '/');
@@ -62,6 +68,82 @@ function encodeScriptSnapshotText(snapshot) {
 
   const length = snapshot.getLength();
   return snapshot.getText(0, length);
+}
+
+function normalizePathForMatching(pathApi, fileName) {
+  return pathApi.resolve(fileName).replace(/\\/gu, '/');
+}
+
+function isTypeScriptFamilySoundscriptAliasFile(fileName) {
+  const lowered = fileName.toLowerCase();
+  return (
+    lowered.endsWith('.ts') ||
+    lowered.endsWith('.tsx') ||
+    lowered.endsWith('.mts') ||
+    lowered.endsWith('.cts')
+  ) && !(
+    lowered.endsWith('.d.ts') ||
+    lowered.endsWith('.d.mts') ||
+    lowered.endsWith('.d.cts')
+  );
+}
+
+function createProjectSoundscriptMatcher(ts, fsApi, pathApi, projectPath) {
+  let rawConfig;
+  try {
+    const configText = fsApi.readFileSync(projectPath, 'utf8');
+    rawConfig = JSON.parse(typeof configText === 'string' ? configText : String(configText));
+  } catch {
+    return () => false;
+  }
+
+  const includePatterns = Array.isArray(rawConfig?.soundscript?.include)
+    ? rawConfig.soundscript.include.filter((value) => typeof value === 'string')
+    : [];
+  if (includePatterns.length === 0) {
+    return () => false;
+  }
+
+  const basePath = normalizePathForMatching(pathApi, pathApi.dirname(projectPath));
+  const includePatternText = ts.getRegularExpressionForWildcard(includePatterns, basePath, 'files');
+  if (!includePatternText) {
+    return () => false;
+  }
+
+  const excludePatterns = Array.isArray(rawConfig?.exclude)
+    ? rawConfig.exclude.filter((value) => typeof value === 'string')
+    : DEFAULT_CONFIG_EXCLUDE_PATTERNS;
+  const excludePatternText = excludePatterns.length > 0
+    ? ts.getRegularExpressionForWildcard(excludePatterns, basePath, 'exclude')
+    : undefined;
+  const includeRegex = new RegExp(includePatternText);
+  const excludeRegex = excludePatternText ? new RegExp(excludePatternText) : undefined;
+
+  return (fileName) => {
+    if (!isTypeScriptFamilySoundscriptAliasFile(fileName)) {
+      return false;
+    }
+
+    const normalizedFileName = normalizePathForMatching(pathApi, fileName);
+    return includeRegex.test(normalizedFileName) && !(excludeRegex?.test(normalizedFileName) ?? false);
+  };
+}
+
+function getProjectSoundscriptMatcher(ts, fsApi, pathApi, state, projectPath) {
+  const normalizedProjectPath = pathApi.resolve(projectPath);
+  const cached = state.projectSoundscriptMatcherByProjectPath.get(normalizedProjectPath);
+  if (cached) {
+    return cached;
+  }
+
+  const matcher = createProjectSoundscriptMatcher(ts, fsApi, pathApi, normalizedProjectPath);
+  state.projectSoundscriptMatcherByProjectPath.set(normalizedProjectPath, matcher);
+  return matcher;
+}
+
+function isProjectSoundscriptSourceFile(ts, fsApi, pathApi, state, projectPath, fileName) {
+  return fileName.endsWith('.sts') ||
+    getProjectSoundscriptMatcher(ts, fsApi, pathApi, state, projectPath)(fileName);
 }
 
 function getWorkspaceBinaryName() {
@@ -649,8 +731,29 @@ function getExtensionForModuleFileName(ts, fileName) {
   return ts.Extension.Ts;
 }
 
+function rootLookupFileName(fileName, stsScriptKind) {
+  if (!fileName.endsWith('.sts')) {
+    return fileName;
+  }
+
+  return `${fileName}.${stsScriptKind === 'tsx' ? 'tsx' : 'ts'}`;
+}
+
+function rootLookupScriptKind(ts, fileName, stsScriptKind) {
+  if (fileName.endsWith('.sts')) {
+    return stsScriptKind === 'tsx' ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+  }
+  if (fileName.endsWith('.tsx')) {
+    return ts.ScriptKind.TSX;
+  }
+  if (fileName.endsWith('.jsx')) {
+    return ts.ScriptKind.JSX;
+  }
+  return ts.ScriptKind.TS;
+}
+
 function createProjectedLanguageService(ts, baseHost, projection, fileName, scriptVersion, stsScriptKind) {
-  const lookupFileName = `${fileName}.${stsScriptKind === 'tsx' ? 'tsx' : 'ts'}`;
+  const lookupFileName = rootLookupFileName(fileName, stsScriptKind);
   const virtualFiles = new Map(
     projection.virtualModules.map((module) => [module.fileName, module.text]),
   );
@@ -687,7 +790,7 @@ function createProjectedLanguageService(ts, baseHost, projection, fileName, scri
     getScriptFileNames: () => [lookupFileName, ...projection.virtualModules.map((module) => module.fileName)],
     getScriptKind: (candidateFileName) => {
       if (candidateFileName === lookupFileName) {
-        return stsScriptKind === 'tsx' ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+        return rootLookupScriptKind(ts, fileName, stsScriptKind);
       }
       return undefined;
     },
@@ -792,9 +895,6 @@ function getProjectedState(ts, options) {
     spawnSyncImpl = spawnSync,
     state,
   } = options;
-  if (!fileName.endsWith('.sts')) {
-    return undefined;
-  }
   const effectiveConfiguration = resolveEffectiveConfiguration(
     configuration,
     fsApi,
@@ -815,6 +915,9 @@ function getProjectedState(ts, options) {
   const projectName = info.project.getProjectName?.() ?? info.project.projectName;
   const projectPath = resolveProjectPath(fsApi, pathApi, projectName, fileName);
   if (!projectPath) {
+    return undefined;
+  }
+  if (!isProjectSoundscriptSourceFile(ts, fsApi, pathApi, state, projectPath, fileName)) {
     return undefined;
   }
 

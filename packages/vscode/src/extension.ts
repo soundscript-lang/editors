@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { activateSoundscriptDiagnostics } from './editor_diagnostics_client';
 import {
   findNearestSoundscriptProject,
+  isLocalSoundscriptFile,
   runEditorProjectSnapshot,
 } from './editor_process_support';
 import { activateProjectedTsBridge } from './projected_ts_bridge';
@@ -133,9 +134,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     'soundscript.dumpActiveDocumentDebugInfo',
     async () => {
       const editor = vscode.window.activeTextEditor;
-      if (!editor || editor.document.languageId !== 'soundscript') {
+      if (!editor || editor.document.uri.scheme !== 'file' || !isLocalSoundscriptFile(editor.document.uri.fsPath)) {
         void vscode.window.showWarningMessage(
-          'Open an active soundscript (.sts) editor to dump debug info.',
+          'Open an active soundscript-classified editor to dump debug info.',
         );
         return;
       }

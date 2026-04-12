@@ -12,7 +12,7 @@
     "package": "npm run compile && node ./package_vsix.cjs",
     "publish": "npm run compile && node ./package_vsix.cjs publish",
     "smoke:mixed": "npm run compile && node ./run_vscode_smoke.js",
-    "test": "npm run compile && node --test out/server_resolution.test.js out/editor_process_support.test.js out/document_symbol_mapping.test.js out/document_symbol_tree.test.js out/definition_position_recovery.test.js out/extension_runtime_mode.test.js out/formatting_configuration.test.js out/typescript_plugin_configuration.test.js out/typescript_extension_support.test.js out/package_manifest.test.js out/syntaxes.test.js out/tsserver_bridge_support.test.js out/soundscript_bridge_client.test.js out/soundscript_bridge_fallback.test.js out/soundscript_stdlib_overrides.test.js ../tsserver-plugin/index.test.js ../tsserver-plugin/lsp_helper_client.test.js"
+    "test": "npm run compile && node --test out/server_resolution.test.js out/editor_process_support.test.js out/document_symbol_mapping.test.js out/document_symbol_tree.test.js out/definition_position_recovery.test.js out/extension_runtime_mode.test.js out/formatting_configuration.test.js out/typescript_plugin_configuration.test.js out/typescript_extension_support.test.js out/package_manifest.test.js out/sound_lib_directory_support.test.js out/syntaxes.test.js out/tsserver_bridge_support.test.js out/soundscript_bridge_client.test.js out/soundscript_bridge_fallback.test.js out/soundscript_stdlib_overrides.test.js ../tsserver-plugin/index.test.js ../tsserver-plugin/lsp_helper_client.test.js"
   },
   "engines": {
     "vscode": "^1.105.0"

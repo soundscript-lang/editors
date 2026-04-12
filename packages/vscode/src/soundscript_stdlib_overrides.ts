@@ -3,6 +3,8 @@ import path from 'node:path';
 
 import ts from 'typescript';
 
+import { resolveBundledLibDirectoryFromPackageRoots } from './sound_lib_directory_support';
+
 const overrideContentsByDirectory = new Map<string, ReadonlyMap<string, string>>();
 
 function normalizePathForComparison(filePath: string): string {
@@ -17,16 +19,10 @@ function looksLikeSoundLibDirectory(directoryPath: string): boolean {
 function searchWorkspacePackageSoundLibs(searchFromPath: string): string | undefined {
   let currentDirectory = path.dirname(searchFromPath);
   while (true) {
-    const candidate = path.join(
-      currentDirectory,
-      'node_modules',
-      '@soundscript',
-      'soundscript',
-      'src',
-      'bundled',
-      'sound-libs',
-    );
-    if (looksLikeSoundLibDirectory(candidate)) {
+    const candidate = resolveBundledLibDirectoryFromPackageRoots([
+      path.join(currentDirectory, 'node_modules', '@soundscript', 'soundscript'),
+    ]);
+    if (candidate && looksLikeSoundLibDirectory(candidate)) {
       return candidate;
     }
 
@@ -42,7 +38,10 @@ function candidateOverrideDirectories(searchFromPath: string): readonly string[]
   return [
     searchWorkspacePackageSoundLibs(searchFromPath),
     path.resolve(__dirname, '..', 'sound-libs'),
-    path.resolve(__dirname, '..', '..', '..', '..', '..', 'soundscript', 'src', 'bundled', 'sound-libs'),
+    resolveBundledLibDirectoryFromPackageRoots([
+      path.resolve(__dirname, '..', '..', '..', '..', 'soundscript'),
+      path.resolve(__dirname, '..', '..', '..', '..', 'soundscript-core'),
+    ]),
   ].filter((candidate): candidate is string => typeof candidate === 'string');
 }
 

@@ -6,48 +6,135 @@ on:
       - published
   workflow_dispatch:
     inputs:
-      tag:
-        description: Existing release tag to upload and publish
-        required: true
+      expected_version:
+        description: Optional version expected from the package manifests
+        required: false
         type: string
 
 permissions:
   contents: write
+  id-token: write
+
+concurrency:
+  group: editors-publish-release
+  cancel-in-progress: false
 
 jobs:
   release-extension:
     runs-on: ubuntu-latest
     env:
-      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
       HAS_VSCE_PAT: ${{ secrets.VSCE_PAT != '' }}
       HAS_OVSX_PAT: ${{ secrets.OVSX_PAT != '' }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/checkout@v4
         with:
           repository: soundscript-lang/soundscript
-          path: soundscript
+          path: soundscript-core
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Use supported npm for trusted publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          SYSTEM_NPX="$(command -v npx)"
+          mkdir -p "$RUNNER_TEMP/npm-bin"
+          cat > "$RUNNER_TEMP/npm-bin/npm" <<EOF
+          #!/usr/bin/env bash
+          exec "$SYSTEM_NPX" --yes npm@^11.5.1 "\$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/npm-bin/npm"
+          export PATH="$RUNNER_TEMP/npm-bin:$PATH"
+          echo "$RUNNER_TEMP/npm-bin" >> "$GITHUB_PATH"
+          node --version
+          npm --version
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(node --input-type=module --eval 'import { readFileSync } from "node:fs"; const plugin = JSON.parse(readFileSync("packages/tsserver-plugin/package.json", "utf8")); const vscode = JSON.parse(readFileSync("packages/vscode/package.json", "utf8")); if (plugin.version !== vscode.version) { throw new Error(`Mismatched release versions: ${plugin.version} vs ${vscode.version}`); } console.log(plugin.version);')"
+          if [[ -n "${{ inputs.expected_version }}" && "${{ inputs.expected_version }}" != "$VERSION" ]]; then
+            echo "Expected version ${{ inputs.expected_version }}, found $VERSION." >&2
+            exit 1
+          fi
+          RELEASE_TAG="${{ github.event.release.tag_name }}"
+          if [[ -z "$RELEASE_TAG" ]]; then
+            RELEASE_TAG="v$VERSION"
+          fi
+          if [[ "$RELEASE_TAG" != "v$VERSION" ]]; then
+            echo "Release tag $RELEASE_TAG does not match package version $VERSION." >&2
+            exit 1
+          fi
+          SOUNDSCRIPT_VERSION="$(node --input-type=module --eval 'import { readFileSync } from "node:fs"; const text = readFileSync("packages/vscode/src/typescript_extension_support.ts", "utf8"); const match = text.match(/MINIMUM_SUPPORTED_WORKSPACE_SOUNDSCRIPT_VERSION = '\''([^'\'']+)'\''/u); if (!match) { throw new Error("Could not find MINIMUM_SUPPORTED_WORKSPACE_SOUNDSCRIPT_VERSION."); } console.log(match[1]);')"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "soundscript_version=$SOUNDSCRIPT_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check npm publish state
+        id: npm_state
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE_NAME="@soundscript/tsserver-plugin"
+          VERSION="${{ steps.meta.outputs.version }}"
+          if npm view "${PACKAGE_NAME}@${VERSION}" version >/dev/null 2>&1; then
+            echo "already published: ${PACKAGE_NAME}@${VERSION}"
+            echo "needs_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "not yet published: ${PACKAGE_NAME}@${VERSION}"
+            echo "needs_publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out matching soundscript tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C soundscript-core fetch --force --tags origin
+          git -C soundscript-core checkout "v${{ steps.meta.outputs.soundscript_version }}"
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build and verify the VSIX
-        run: npm run package:vscode
+      - name: Run release checks
+        run: npm test
 
-      - name: Upload VSIX to the GitHub release
+      - name: Publish tsserver plugin to npm
+        if: ${{ steps.npm_state.outputs.needs_publish == 'true' }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          SOUNDSCRIPT_SKIP_VSCODE_PUBLISH: '1'
+        run: npm run release:publish
+
+      - name: Create or update GitHub release and upload the VSIX
         run: |
           set -euo pipefail
+          RELEASE_TAG="${{ steps.meta.outputs.release_tag }}"
+          VERSION="${{ steps.meta.outputs.version }}"
           VSIX_PATH="$(echo packages/vscode/soundscript-vscode-*.vsix)"
-          gh release upload "$RELEASE_TAG" "$VSIX_PATH" --clobber
+          NOTES_FILE="$RUNNER_TEMP/release-notes.md"
+          cat <<EOF > "$NOTES_FILE"
+          editors v${VERSION}
+
+          Published package:
+          - \`@soundscript/tsserver-plugin@${VERSION}\`
+          EOF
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" --title "editors v${VERSION}" --notes-file "$NOTES_FILE"
+            gh release upload "$RELEASE_TAG" "$VSIX_PATH" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$VSIX_PATH" --target "$GITHUB_SHA" --title "editors v${VERSION}" --notes-file "$NOTES_FILE"
+          fi
 
       - name: Publish to Visual Studio Marketplace
         if: ${{ env.HAS_VSCE_PAT == 'true' }}

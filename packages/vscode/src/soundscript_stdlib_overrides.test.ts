@@ -21,7 +21,8 @@ test('resolveSoundscriptLibOverrideDirectory prefers workspace package sound-lib
     'soundscript',
     'src',
     'bundled',
-    'sound-libs',
+    'typescript',
+    'lib',
   );
   mkdirSync(overrideDirectory, { recursive: true });
   writeFileSync(path.join(overrideDirectory, 'lib.es5.d.ts'), 'declare type JsonValue = string;\n');
@@ -39,7 +40,8 @@ test('createSoundscriptLibOverrides remaps default lib file paths to bundled sou
     'soundscript',
     'src',
     'bundled',
-    'sound-libs',
+    'typescript',
+    'lib',
   );
   mkdirSync(overrideDirectory, { recursive: true });
 
@@ -72,7 +74,8 @@ test('createSoundscriptLibOverrides feeds JsonValue through a TypeScript languag
     'soundscript',
     'src',
     'bundled',
-    'sound-libs',
+    'typescript',
+    'lib',
   );
   mkdirSync(path.dirname(documentPath), { recursive: true });
   mkdirSync(overrideDirectory, { recursive: true });

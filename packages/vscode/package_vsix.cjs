@@ -3,6 +3,7 @@ const path = require('node:path');
 const os = require('node:os');
 const childProcess = require('node:child_process');
 const {
+  resolveBundledLibDirectoryFromSiblingCheckouts,
   resolveBundledLibDirectoryFromPackageRoots,
 } = require('./out/sound_lib_directory_support.js');
 
@@ -14,10 +15,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.j
 function resolveSoundLibsRoot() {
   const candidates = [
     path.join(packageRoot, 'sound-libs'),
-    resolveBundledLibDirectoryFromPackageRoots([
-      path.resolve(packageRoot, '..', '..', '..', 'soundscript'),
-      path.resolve(packageRoot, '..', '..', '..', 'soundscript-core'),
-    ]),
+    resolveBundledLibDirectoryFromSiblingCheckouts(packageRoot, ['soundscript', 'soundscript-core']),
   ];
   for (const candidate of candidates) {
     if (candidate && fs.existsSync(path.join(candidate, 'lib.es5.d.ts'))) {

@@ -35,3 +35,26 @@ export function resolveBundledLibDirectoryFromPackageRoots(
 
   return undefined;
 }
+
+export function resolveBundledLibDirectoryFromSiblingCheckouts(
+  searchFromDirectory: string,
+  checkoutDirectoryNames: readonly string[],
+  maxAscents = 4,
+): string | undefined {
+  const packageRoots: string[] = [];
+  let currentDirectory = searchFromDirectory;
+
+  for (let ascent = 0; ascent <= maxAscents; ascent += 1) {
+    for (const checkoutDirectoryName of checkoutDirectoryNames) {
+      packageRoots.push(path.join(currentDirectory, checkoutDirectoryName));
+    }
+
+    const parentDirectory = path.dirname(currentDirectory);
+    if (parentDirectory === currentDirectory) {
+      break;
+    }
+    currentDirectory = parentDirectory;
+  }
+
+  return resolveBundledLibDirectoryFromPackageRoots(packageRoots);
+}

@@ -3,7 +3,10 @@ import path from 'node:path';
 
 import ts from 'typescript';
 
-import { resolveBundledLibDirectoryFromPackageRoots } from './sound_lib_directory_support';
+import {
+  resolveBundledLibDirectoryFromPackageRoots,
+  resolveBundledLibDirectoryFromSiblingCheckouts,
+} from './sound_lib_directory_support';
 
 const overrideContentsByDirectory = new Map<string, ReadonlyMap<string, string>>();
 
@@ -38,10 +41,7 @@ function candidateOverrideDirectories(searchFromPath: string): readonly string[]
   return [
     searchWorkspacePackageSoundLibs(searchFromPath),
     path.resolve(__dirname, '..', 'sound-libs'),
-    resolveBundledLibDirectoryFromPackageRoots([
-      path.resolve(__dirname, '..', '..', '..', '..', 'soundscript'),
-      path.resolve(__dirname, '..', '..', '..', '..', 'soundscript-core'),
-    ]),
+    resolveBundledLibDirectoryFromSiblingCheckouts(__dirname, ['soundscript', 'soundscript-core']),
   ].filter((candidate): candidate is string => typeof candidate === 'string');
 }
 

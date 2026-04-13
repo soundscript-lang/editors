@@ -116,6 +116,9 @@ jobs:
           SOUNDSCRIPT_SKIP_VSCODE_PUBLISH: '1'
         run: npm run release:publish
 
+      - name: Build and verify the VSIX
+        run: npm run package:vscode
+
       - name: Create or update GitHub release and upload the VSIX
         run: |
           set -euo pipefail

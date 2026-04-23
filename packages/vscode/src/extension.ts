@@ -6,6 +6,7 @@ import {
   isLocalSoundscriptFile,
   runEditorProjectSnapshot,
 } from './editor_process_support';
+import { activateSoundscriptLanguageDetection } from './language_detection';
 import { activateProjectedTsBridge } from './projected_ts_bridge';
 import {
   configureTypeScriptPlugin,
@@ -48,6 +49,7 @@ async function restartTypeScriptIntegration(
   outputChannel: vscode.OutputChannel,
   extensionContext: vscode.ExtensionContext,
   diagnostics: { refreshAll(): void },
+  languageDetection: { refreshAll(): Promise<void> },
   projectedBridge: { refreshAll(): void },
 ): Promise<void> {
   const cliResolution = resolveSoundscriptCliResolution(extensionContext);
@@ -56,6 +58,7 @@ async function restartTypeScriptIntegration(
   if (!configured) {
     throw new Error('Built-in TypeScript extension API is unavailable.');
   }
+  await languageDetection.refreshAll();
 
   try {
     await vscode.commands.executeCommand('typescript.restartTsServer');
@@ -107,6 +110,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(outputChannel);
   const cliResolution = resolveSoundscriptCliResolution(context);
   reportCliCompatibilityIssue(outputChannel, cliResolution.compatibilityIssue);
+  const languageDetection = activateSoundscriptLanguageDetection({
+    appendLine: (message) => outputChannel.appendLine(message),
+    createFileSystemWatcher: (pattern) => vscode.workspace.createFileSystemWatcher(pattern),
+    onDidOpenTextDocument: (listener) => vscode.workspace.onDidOpenTextDocument(listener),
+    onDidSaveTextDocument: (listener) => vscode.workspace.onDidSaveTextDocument(listener),
+    setTextDocumentLanguage: (document, languageId) =>
+      vscode.languages.setTextDocumentLanguage(document as vscode.TextDocument, languageId),
+    get textDocuments() {
+      return vscode.workspace.textDocuments;
+    },
+  });
+  context.subscriptions.push(languageDetection);
+  await languageDetection.refreshAll();
   const diagnostics = activateSoundscriptDiagnostics(outputChannel, cliResolution.cliLaunch);
   context.subscriptions.push(diagnostics);
   const projectedBridge = activateProjectedTsBridge(outputChannel, cliResolution.cliLaunch);
@@ -116,7 +132,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     'soundscript.restartLanguageServer',
     async () => {
       try {
-        await restartTypeScriptIntegration(outputChannel, context, diagnostics, projectedBridge);
+        await restartTypeScriptIntegration(
+          outputChannel,
+          context,
+          diagnostics,
+          languageDetection,
+          projectedBridge,
+        );
         void vscode.window.showInformationMessage('soundscript TypeScript integration restarted.');
       } catch (error) {
         outputChannel.appendLine(`Failed to restart TypeScript integration: ${describeError(error)}`);
@@ -195,7 +217,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       return;
     }
 
-    void restartTypeScriptIntegration(outputChannel, context, diagnostics, projectedBridge).catch((error) => {
+    void restartTypeScriptIntegration(outputChannel, context, diagnostics, languageDetection, projectedBridge).catch((error) => {
       outputChannel.appendLine(
         `Failed to apply updated soundscript TypeScript settings: ${describeError(error)}`,
       );

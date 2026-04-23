@@ -139,6 +139,15 @@ function getProjectSoundscriptMatcher(projectPath: string): (filePath: string) =
   return matcher;
 }
 
+export function clearProjectSoundscriptMatcherCache(projectPath?: string): void {
+  if (projectPath === undefined) {
+    projectSoundscriptMatcherCache.clear();
+    return;
+  }
+
+  projectSoundscriptMatcherCache.delete(path.resolve(projectPath));
+}
+
 export function buildCliArgs(
   cliLaunch: ResolvedCliLaunch,
   subcommand: string,

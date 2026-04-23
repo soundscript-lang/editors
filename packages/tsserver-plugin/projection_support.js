@@ -36,11 +36,15 @@ function isObject(value) {
   return value !== null && typeof value === 'object';
 }
 
-function resolveProjectPath(fsApi, pathApi, projectName, fileName) {
+function resolveProjectNamePath(fsApi, projectName) {
   if (typeof projectName === 'string' && projectName.endsWith('.json') && fsApi.existsSync(projectName)) {
     return projectName;
   }
 
+  return undefined;
+}
+
+function findNearestProjectPath(fsApi, pathApi, fileName) {
   let currentDirectory = pathApi.dirname(fileName);
   while (true) {
     const soundscriptConfigPath = pathApi.join(currentDirectory, 'tsconfig.soundscript.json');
@@ -59,6 +63,10 @@ function resolveProjectPath(fsApi, pathApi, projectName, fileName) {
     }
     currentDirectory = parentDirectory;
   }
+}
+
+function resolveProjectPath(fsApi, pathApi, projectName, fileName) {
+  return resolveProjectNamePath(fsApi, projectName) ?? findNearestProjectPath(fsApi, pathApi, fileName);
 }
 
 function encodeScriptSnapshotText(snapshot) {
@@ -144,6 +152,33 @@ function getProjectSoundscriptMatcher(ts, fsApi, pathApi, state, projectPath) {
 function isProjectSoundscriptSourceFile(ts, fsApi, pathApi, state, projectPath, fileName) {
   return fileName.endsWith('.sts') ||
     getProjectSoundscriptMatcher(ts, fsApi, pathApi, state, projectPath)(fileName);
+}
+
+function resolveSoundscriptProjectPath(ts, fsApi, pathApi, state, projectName, fileName) {
+  const candidateProjectPaths = [];
+  const seenProjectPaths = new Set();
+  const addCandidateProjectPath = (candidatePath) => {
+    if (typeof candidatePath !== 'string' || candidatePath.length === 0) {
+      return;
+    }
+    const normalizedCandidatePath = pathApi.resolve(candidatePath);
+    if (seenProjectPaths.has(normalizedCandidatePath)) {
+      return;
+    }
+    seenProjectPaths.add(normalizedCandidatePath);
+    candidateProjectPaths.push(normalizedCandidatePath);
+  };
+
+  addCandidateProjectPath(findNearestProjectPath(fsApi, pathApi, fileName));
+  addCandidateProjectPath(resolveProjectNamePath(fsApi, projectName));
+
+  for (const candidateProjectPath of candidateProjectPaths) {
+    if (isProjectSoundscriptSourceFile(ts, fsApi, pathApi, state, candidateProjectPath, fileName)) {
+      return candidateProjectPath;
+    }
+  }
+
+  return resolveProjectPath(fsApi, pathApi, projectName, fileName);
 }
 
 function getWorkspaceBinaryName() {
@@ -913,7 +948,14 @@ function getProjectedState(ts, options) {
     fsApi.readFileSync(fileName, 'utf8');
   const scriptVersion = baseHost.getScriptVersion?.(fileName) ?? sourceText;
   const projectName = info.project.getProjectName?.() ?? info.project.projectName;
-  const projectPath = resolveProjectPath(fsApi, pathApi, projectName, fileName);
+  const projectPath = resolveSoundscriptProjectPath(
+    ts,
+    fsApi,
+    pathApi,
+    state,
+    projectName,
+    fileName,
+  );
   if (!projectPath) {
     return undefined;
   }

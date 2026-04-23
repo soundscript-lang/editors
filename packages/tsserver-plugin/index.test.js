@@ -448,6 +448,111 @@ test('tsserver plugin uses projected quick info and definitions for configured T
   assert.equal(definitions[0]?.fileName, '/workspace/src/main.ts');
 });
 
+test('tsserver plugin prefers a nested soundscript config over a root TypeScript project for configured files', () => {
+  const rawText = 'console.log(answer);\n';
+  const rootConfigPath = '/workspace/tsconfig.json';
+  const backendConfigPath = '/workspace/unthread/backend/tsconfig.json';
+  const filePath = '/workspace/unthread/backend/src/soundscript-test.ts';
+  const backendConfigText = JSON.stringify({
+    soundscript: {
+      include: ['src/soundscript-test.ts'],
+    },
+  });
+  const projectionPayload = {
+    command: 'editor-project',
+    filePath,
+    originalText: rawText,
+    projectedText: [
+      'declare const answer: 1;',
+      'console.log(answer);',
+      '',
+    ].join('\n'),
+    projectPath: backendConfigPath,
+    rewriteStage: {
+      replacements: [{
+        originalSpan: { start: 0, end: 0 },
+        rewrittenSpan: { start: 0, end: 'declare const answer: 1;\n'.length },
+      }],
+      rewrittenText: [
+        'declare const answer: 1;',
+        'console.log(answer);',
+        '',
+      ].join('\n'),
+    },
+    virtualModules: [],
+  };
+  const spawnCalls = [];
+  const plugin = createPluginWithModules({
+    fs: {
+      existsSync: (candidatePath) =>
+        candidatePath === rootConfigPath || candidatePath === backendConfigPath,
+      readFileSync: (candidatePath) => {
+        if (candidatePath === rootConfigPath) {
+          return '{}';
+        }
+        if (candidatePath === backendConfigPath) {
+          return backendConfigText;
+        }
+        return rawText;
+      },
+    },
+    spawnSync: (command, args) => {
+      spawnCalls.push({ command, args });
+      return {
+        error: undefined,
+        status: 0,
+        stderr: '',
+        stdout: JSON.stringify(projectionPayload),
+      };
+    },
+  });
+  const projectService = createProjectService();
+  const languageService = createLanguageServiceFixture({
+    [filePath]: rawText,
+  });
+  const pluginLanguageService = plugin.create({
+    config: {
+      soundscriptArgsPrefix: ['run', '-A', '/repo/src/main.ts'],
+      soundscriptCommand: 'deno',
+      stsScriptKind: 'ts',
+    },
+    languageService,
+    languageServiceHost: {
+      getCompilationSettings: () => ({
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        target: ts.ScriptTarget.ES2020,
+      }),
+      getCurrentDirectory: () => '/workspace',
+      getScriptSnapshot: (candidatePath) => candidatePath === filePath
+        ? ts.ScriptSnapshot.fromString(rawText)
+        : undefined,
+      getScriptVersion: () => '1',
+    },
+    project: {
+      getProjectName: () => rootConfigPath,
+      projectService,
+    },
+  });
+
+  const answerPosition = rawText.indexOf('answer');
+  const quickInfo = pluginLanguageService.getQuickInfoAtPosition(filePath, answerPosition);
+
+  assert.ok(quickInfo);
+  assert.equal(ts.displayPartsToString(quickInfo.displayParts ?? []), 'const answer: 1');
+  assert.deepEqual(spawnCalls.map((call) => call.args), [[
+    'run',
+    '-A',
+    '/repo/src/main.ts',
+    'editor-project',
+    '--project',
+    backendConfigPath,
+    '--file',
+    filePath,
+    '--stdin-file',
+  ]]);
+});
+
 test('tsserver plugin keeps unmatched TypeScript files on the base path', () => {
   const rawText = 'console.log(answer);\n';
   const projectConfigText = JSON.stringify({

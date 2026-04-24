@@ -20,7 +20,7 @@ test('Soundscript grammar highlights TS-native declaration annotations and DSL t
 
   assert.deepEqual(
     grammar.patterns.map((pattern) => pattern.include),
-    ['#annotation-comment', '#dsl-tag', '#builtin-macro-call', 'source.ts'],
+    ['#annotation-comment', '#dsl-tag', '#builtin-macro-call', 'source.tsx'],
   );
   assert.ok('annotation-comment' in grammar.repository);
   assert.ok('annotation-arguments' in grammar.repository);

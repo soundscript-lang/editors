@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 import type { ResolvedCliLaunch } from './server_resolution';
@@ -37,6 +38,10 @@ interface DiagnosticsWorkerClientOptions {
   spawn?: SpawnDiagnosticsWorker;
 }
 
+export type ProjectCliLaunchResolver = (
+  projectPath: string,
+) => ResolvedCliLaunch | undefined;
+
 interface PendingRequest {
   reject(error: Error): void;
   resolve(value: unknown): void;
@@ -51,8 +56,16 @@ function isSoundscriptDocument(document: vscode.TextDocument): boolean {
   return document.languageId === 'soundscript' && document.uri.scheme === 'file';
 }
 
-function workspaceKeyForDocument(document: vscode.TextDocument): string {
-  return vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath ?? '__default__';
+function pendingKeyForDocument(document: vscode.TextDocument): string {
+  return document.uri.toString();
+}
+
+function workerKeyForProject(projectPath: string, cliLaunch: ResolvedCliLaunch): string {
+  return [
+    projectPath,
+    cliLaunch.command,
+    ...cliLaunch.argsPrefix,
+  ].join('\u0000');
 }
 
 function toDiagnosticSeverity(severity: number | undefined): vscode.DiagnosticSeverity {
@@ -244,38 +257,46 @@ export interface SoundscriptDiagnosticsController extends vscode.Disposable {
 
 export function activateSoundscriptDiagnostics(
   outputChannel: vscode.OutputChannel,
-  cliLaunch?: ResolvedCliLaunch,
+  cliLaunchOrResolver?: ResolvedCliLaunch | ProjectCliLaunchResolver,
   spawnProcess?: SpawnDiagnosticsWorker,
 ): SoundscriptDiagnosticsController {
   const diagnostics = vscode.languages.createDiagnosticCollection('soundscript');
-  const workersByWorkspace = new Map<string, DiagnosticsWorkerConnection>();
+  const workersByProject = new Map<string, DiagnosticsWorkerConnection>();
   const lastPublishedDiagnostics = new Map<string, readonly WorkerDiagnostic[]>();
   const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const pendingDocuments = new Map<string, vscode.TextDocument>();
 
-  async function getWorker(document: vscode.TextDocument): Promise<DiagnosticsWorkerConnection | undefined> {
+  function resolveCliLaunch(
+    projectPath: string,
+  ): ResolvedCliLaunch | undefined {
+    return typeof cliLaunchOrResolver === 'function'
+      ? cliLaunchOrResolver(projectPath)
+      : cliLaunchOrResolver;
+  }
+
+  async function getWorker(
+    document: vscode.TextDocument,
+    projectPath: string,
+  ): Promise<DiagnosticsWorkerConnection | undefined> {
+    const cliLaunch = resolveCliLaunch(projectPath);
     if (!cliLaunch) {
       return undefined;
     }
 
-    const key = workspaceKeyForDocument(document);
-    const existing = workersByWorkspace.get(key);
+    const key = workerKeyForProject(projectPath, cliLaunch);
+    const existing = workersByProject.get(key);
     if (existing) {
       return existing;
     }
 
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-    const cwd = workspaceFolder?.uri.fsPath ??
-      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
-      document.uri.fsPath;
     const worker = new DiagnosticsWorkerConnection(
       outputChannel,
-      cwd,
+      path.dirname(projectPath),
       cliLaunch,
       spawnProcess ?? (spawn as unknown as SpawnDiagnosticsWorker),
     );
     await worker.initialize();
-    workersByWorkspace.set(key, worker);
+    workersByProject.set(key, worker);
     return worker;
   }
 
@@ -290,7 +311,7 @@ export function activateSoundscriptDiagnostics(
       return;
     }
 
-    const worker = await getWorker(document);
+    const worker = await getWorker(document, projectPath);
     if (!worker) {
       diagnostics.delete(document.uri);
       return;
@@ -307,7 +328,7 @@ export function activateSoundscriptDiagnostics(
       return;
     }
 
-    const key = workspaceKeyForDocument(document);
+    const key = pendingKeyForDocument(document);
     pendingDocuments.set(key, document);
     const existingTimer = pendingTimers.get(key);
     if (existingTimer) {
@@ -352,16 +373,20 @@ export function activateSoundscriptDiagnostics(
         return;
       }
       diagnostics.delete(document.uri);
-      const key = workspaceKeyForDocument(document);
+      const key = pendingKeyForDocument(document);
       pendingDocuments.delete(key);
       const timer = pendingTimers.get(key);
       if (timer) {
         clearTimeout(timer);
         pendingTimers.delete(key);
       }
-      const worker = workersByWorkspace.get(key);
-      if (worker) {
-        void worker.closeDocument(document.uri.fsPath).catch(() => {});
+      const projectPath = findNearestSoundscriptProject(document.uri.fsPath);
+      if (projectPath) {
+        for (const [workerKey, worker] of workersByProject.entries()) {
+          if (workerKey.startsWith(`${projectPath}\u0000`)) {
+            void worker.closeDocument(document.uri.fsPath).catch(() => {});
+          }
+        }
       }
     }),
     {
@@ -371,10 +396,10 @@ export function activateSoundscriptDiagnostics(
         }
         pendingTimers.clear();
         pendingDocuments.clear();
-        for (const worker of workersByWorkspace.values()) {
+        for (const worker of workersByProject.values()) {
           worker.dispose();
         }
-        workersByWorkspace.clear();
+        workersByProject.clear();
       },
     },
   );
@@ -385,7 +410,7 @@ export function activateSoundscriptDiagnostics(
     },
     async dumpDebugInfo(document, position) {
       const projectPath = findNearestSoundscriptProject(document.uri.fsPath) ?? null;
-      const worker = await getWorker(document);
+      const worker = projectPath ? await getWorker(document, projectPath) : undefined;
       const workerDiagnostics = projectPath && worker
         ? await worker.requestDiagnostics(document.uri.fsPath, projectPath)
         : [];

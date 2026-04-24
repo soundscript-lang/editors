@@ -4,8 +4,11 @@ import test from 'node:test';
 import {
   compareReleaseVersions,
   findExecutableOnPath,
+  resolveCliLaunchForProject,
   resolveCliLaunch,
   resolveDevelopmentCliArgs,
+  resolveNearestWorkspaceServerCommand,
+  resolveNearestWorkspaceSoundscriptPackage,
   resolveServerLaunch,
   resolveWorkspaceServerCommand,
   resolveWorkspaceSoundscriptPackage,
@@ -29,6 +32,17 @@ test('resolveWorkspaceServerCommand uses the Windows .cmd shim', () => {
   );
 
   assert.equal(resolved, 'C:\\workspace\\app\\node_modules\\.bin\\soundscript.cmd');
+});
+
+test('resolveNearestWorkspaceServerCommand finds a nested package install from a project config', () => {
+  const resolved = resolveNearestWorkspaceServerCommand(
+    '/workspace/repo/packages/backend/tsconfig.json',
+    'darwin',
+    (candidatePath) =>
+      candidatePath === '/workspace/repo/packages/backend/node_modules/.bin/soundscript',
+  );
+
+  assert.equal(resolved, '/workspace/repo/packages/backend/node_modules/.bin/soundscript');
 });
 
 test('findExecutableOnPath resolves a global soundscript binary from PATH', () => {
@@ -128,6 +142,28 @@ test('resolveCliLaunch prefers a workspace install in production mode', () => {
   });
 });
 
+test('resolveCliLaunchForProject prefers a nested project install over global PATH', () => {
+  const resolved = resolveCliLaunchForProject(
+    {
+      extensionMode: 'production',
+      extensionPath: '/extension',
+      pathEnv: '/usr/local/bin:/usr/bin',
+      platform: 'linux',
+      workspaceFolders: ['/workspace/repo'],
+      existsSync: (candidatePath) =>
+        candidatePath === '/workspace/repo/packages/backend/node_modules/.bin/soundscript' ||
+        candidatePath === '/usr/local/bin/soundscript',
+    },
+    '/workspace/repo/packages/backend/tsconfig.json',
+  );
+
+  assert.deepEqual(resolved, {
+    argsPrefix: [],
+    command: '/workspace/repo/packages/backend/node_modules/.bin/soundscript',
+    source: 'workspace',
+  });
+});
+
 test('resolveCliLaunch uses an absolute Deno path in development mode', () => {
   const resolved = resolveCliLaunch({
     extensionMode: 'development',
@@ -175,6 +211,23 @@ test('resolveWorkspaceSoundscriptPackage reads the workspace package version', (
     packageJsonPath: '/workspace/app/node_modules/@soundscript/soundscript/package.json',
     version: '0.1.2',
     workspaceFolder: '/workspace/app',
+  });
+});
+
+test('resolveNearestWorkspaceSoundscriptPackage reads the nested project package version', () => {
+  const resolved = resolveNearestWorkspaceSoundscriptPackage(
+    '/workspace/repo/packages/backend/tsconfig.json',
+    'linux',
+    (candidatePath) =>
+      candidatePath ===
+        '/workspace/repo/packages/backend/node_modules/@soundscript/soundscript/package.json',
+    () => JSON.stringify({ version: '0.1.42' }),
+  );
+
+  assert.deepEqual(resolved, {
+    packageJsonPath: '/workspace/repo/packages/backend/node_modules/@soundscript/soundscript/package.json',
+    version: '0.1.42',
+    workspaceFolder: '/workspace/repo/packages/backend',
   });
 });
 

@@ -13,6 +13,7 @@ import {
   isTypeScriptPluginConfigurationChange,
   formatSoundscriptCliCompatibilityIssue,
   resolveSoundscriptCliResolution,
+  resolveSoundscriptCliResolutionForProject,
   type SoundscriptCliCompatibilityIssue,
 } from './typescript_extension_support';
 import { ensureTypeScriptServerStarted } from './tsserver_startup';
@@ -104,12 +105,24 @@ function reportCliCompatibilityIssue(
   lastCliCompatibilityIssueKey = issueKey;
 }
 
+function createProjectCliLaunchResolver(
+  outputChannel: vscode.OutputChannel,
+  context: vscode.ExtensionContext,
+) {
+  return (projectPath: string) => {
+    const cliResolution = resolveSoundscriptCliResolutionForProject(context, projectPath);
+    reportCliCompatibilityIssue(outputChannel, cliResolution.compatibilityIssue);
+    return cliResolution.cliLaunch;
+  };
+}
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('soundscript');
   soundscriptOutputChannel = outputChannel;
   context.subscriptions.push(outputChannel);
   const cliResolution = resolveSoundscriptCliResolution(context);
   reportCliCompatibilityIssue(outputChannel, cliResolution.compatibilityIssue);
+  const projectCliLaunchResolver = createProjectCliLaunchResolver(outputChannel, context);
   const languageDetection = activateSoundscriptLanguageDetection({
     appendLine: (message) => outputChannel.appendLine(message),
     createFileSystemWatcher: (pattern) => vscode.workspace.createFileSystemWatcher(pattern),
@@ -123,9 +136,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   context.subscriptions.push(languageDetection);
   await languageDetection.refreshAll();
-  const diagnostics = activateSoundscriptDiagnostics(outputChannel, cliResolution.cliLaunch);
+  const diagnostics = activateSoundscriptDiagnostics(outputChannel, projectCliLaunchResolver);
   context.subscriptions.push(diagnostics);
-  const projectedBridge = activateProjectedTsBridge(outputChannel, cliResolution.cliLaunch);
+  const projectedBridge = activateProjectedTsBridge(outputChannel, projectCliLaunchResolver);
   context.subscriptions.push(projectedBridge);
 
   const restartCommand = vscode.commands.registerCommand(
@@ -165,9 +178,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
       try {
         const projectPath = findNearestSoundscriptProject(editor.document.uri.fsPath) ?? null;
-        const projectionSnapshot = projectPath && cliResolution.cliLaunch
+        const projectCliLaunch = projectPath ? projectCliLaunchResolver(projectPath) : undefined;
+        const projectionSnapshot = projectPath && projectCliLaunch
           ? runEditorProjectSnapshot(
-            cliResolution.cliLaunch,
+            projectCliLaunch,
             projectPath,
             editor.document.uri.fsPath,
             editor.document.getText(),

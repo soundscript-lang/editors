@@ -10,7 +10,9 @@ import {
 import {
   compareReleaseVersions,
   type ResolvedCliLaunch,
+  resolveCliLaunchForProject,
   resolveCliLaunch,
+  resolveNearestWorkspaceSoundscriptPackage,
   resolveWorkspaceSoundscriptPackage,
 } from './server_resolution';
 
@@ -80,6 +82,64 @@ export function resolveSoundscriptCliResolution(
   }
 
   const workspacePackage = resolveWorkspaceSoundscriptPackage(
+    vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath) ?? [],
+    process.platform,
+    existsSync,
+  );
+  if (!workspacePackage) {
+    return { cliLaunch };
+  }
+
+  const versionComparison = compareReleaseVersions(
+    workspacePackage.version,
+    MINIMUM_SUPPORTED_WORKSPACE_SOUNDSCRIPT_VERSION,
+  );
+  if (versionComparison !== undefined && versionComparison < 0) {
+    return {
+      compatibilityIssue: {
+        detectedVersion: workspacePackage.version,
+        minimumVersion: MINIMUM_SUPPORTED_WORKSPACE_SOUNDSCRIPT_VERSION,
+        packageJsonPath: workspacePackage.packageJsonPath,
+        workspaceFolder: workspacePackage.workspaceFolder,
+      },
+    };
+  }
+
+  return { cliLaunch };
+}
+
+export function resolveSoundscriptCliResolutionForProject(
+  extensionContext: vscode.ExtensionContext,
+  projectPath: string,
+): ResolvedSoundscriptCli {
+  const extensionMode = extensionContext.extensionMode === vscode.ExtensionMode.Production
+    ? 'production'
+    : extensionContext.extensionMode === vscode.ExtensionMode.Test
+    ? 'test'
+    : 'development';
+  const resolvedMode = resolveServerRuntimeMode(
+    extensionMode,
+    process.env.SOUNDSCRIPT_FORCE_DEVELOPMENT_CLI === '1',
+  );
+  const cliLaunch = resolveCliLaunchForProject({
+    existsSync,
+    extensionMode: resolvedMode,
+    extensionPath: extensionContext.extensionPath,
+    homeDir: process.env.HOME,
+    pathEnv: process.env.PATH,
+    platform: process.platform,
+    workspaceFolders: vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath) ?? [],
+  }, projectPath);
+
+  if (cliLaunch?.source !== 'workspace') {
+    return { cliLaunch };
+  }
+
+  const workspacePackage = resolveNearestWorkspaceSoundscriptPackage(
+    projectPath,
+    process.platform,
+    existsSync,
+  ) ?? resolveWorkspaceSoundscriptPackage(
     vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath) ?? [],
     process.platform,
     existsSync,

@@ -864,17 +864,25 @@ export interface ProjectedTsBridgeController extends vscode.Disposable {
   refreshAll(): void;
 }
 
+export type ProjectCliLaunchResolver = (projectPath: string) => ResolvedCliLaunch | undefined;
+
 export function activateProjectedTsBridge(
   outputChannel: vscode.OutputChannel,
-  cliLaunch?: ResolvedCliLaunch,
+  cliLaunchOrResolver?: ResolvedCliLaunch | ProjectCliLaunchResolver,
 ): ProjectedTsBridgeController {
   const statesByDocumentVersion = new Map<string, { key: string; state: ProjectedLanguageServiceState }>();
   const stdlibDocumentsByUri = new Map<string, string>();
 
+  function resolveCliLaunch(projectPath: string): ResolvedCliLaunch | undefined {
+    return typeof cliLaunchOrResolver === 'function'
+      ? cliLaunchOrResolver(projectPath)
+      : cliLaunchOrResolver;
+  }
+
   async function getState(
     document: vscode.TextDocument,
   ): Promise<ProjectedLanguageServiceState | undefined> {
-    if (!cliLaunch || !isSoundscriptDocument(document)) {
+    if (!isSoundscriptDocument(document)) {
       return undefined;
     }
 
@@ -882,8 +890,19 @@ export function activateProjectedTsBridge(
     if (!projectPath) {
       return undefined;
     }
+    const cliLaunch = resolveCliLaunch(projectPath);
+    if (!cliLaunch) {
+      return undefined;
+    }
 
-    const cacheKey = `${document.uri.toString()}:${document.version}:${projectPath}:${readStsScriptKind()}`;
+    const cacheKey = [
+      document.uri.toString(),
+      String(document.version),
+      projectPath,
+      cliLaunch.command,
+      ...cliLaunch.argsPrefix,
+      readStsScriptKind(),
+    ].join('\u0000');
     const cached = statesByDocumentVersion.get(document.uri.toString());
     if (cached?.key === cacheKey) {
       return cached.state;

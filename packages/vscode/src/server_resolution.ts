@@ -155,6 +155,34 @@ export function resolveWorkspaceServerCommand(
   return undefined;
 }
 
+export function resolveNearestWorkspaceServerCommand(
+  startPath: string,
+  platform: NodeJS.Platform,
+  existsSync: (candidatePath: string) => boolean,
+): string | undefined {
+  const binaryName = getWorkspaceBinaryName(platform);
+  const pathApi = getPathApi(platform);
+  let currentDirectory = pathApi.dirname(startPath);
+
+  while (true) {
+    const candidatePath = pathApi.join(
+      currentDirectory,
+      'node_modules',
+      '.bin',
+      binaryName,
+    );
+    if (existsSync(candidatePath)) {
+      return candidatePath;
+    }
+
+    const parentDirectory = pathApi.dirname(currentDirectory);
+    if (parentDirectory === currentDirectory) {
+      return undefined;
+    }
+    currentDirectory = parentDirectory;
+  }
+}
+
 export function resolveWorkspaceSoundscriptPackage(
   workspaceFolders: readonly string[],
   platform: NodeJS.Platform,
@@ -191,6 +219,46 @@ export function resolveWorkspaceSoundscriptPackage(
   }
 
   return undefined;
+}
+
+export function resolveNearestWorkspaceSoundscriptPackage(
+  startPath: string,
+  platform: NodeJS.Platform,
+  existsSync: (candidatePath: string) => boolean,
+  readTextFile: (candidatePath: string) => string = (candidatePath) => readFileSync(candidatePath, 'utf8'),
+): ResolvedWorkspaceSoundscriptPackage | undefined {
+  const pathApi = getPathApi(platform);
+  let currentDirectory = pathApi.dirname(startPath);
+
+  while (true) {
+    const packageJsonPath = pathApi.join(
+      currentDirectory,
+      'node_modules',
+      '@soundscript',
+      'soundscript',
+      'package.json',
+    );
+    if (existsSync(packageJsonPath)) {
+      try {
+        const manifest = JSON.parse(readTextFile(packageJsonPath)) as { version?: unknown };
+        if (typeof manifest.version === 'string' && manifest.version.length > 0) {
+          return {
+            packageJsonPath,
+            version: manifest.version,
+            workspaceFolder: currentDirectory,
+          };
+        }
+      } catch {
+        // Keep walking upward; an invalid nested package should not hide a valid parent install.
+      }
+    }
+
+    const parentDirectory = pathApi.dirname(currentDirectory);
+    if (parentDirectory === currentDirectory) {
+      return undefined;
+    }
+    currentDirectory = parentDirectory;
+  }
 }
 
 function parseReleaseVersion(version: string): [number, number, number] | undefined {
@@ -363,4 +431,28 @@ export function resolveCliLaunch(
   }
 
   return undefined;
+}
+
+export function resolveCliLaunchForProject(
+  options: Omit<ResolveServerLaunchOptions, 'configuredArgs' | 'configuredCommand'>,
+  projectPath: string,
+): ResolvedCliLaunch | undefined {
+  if (options.extensionMode === 'development') {
+    return resolveCliLaunch(options);
+  }
+
+  const nearestWorkspaceCommand = resolveNearestWorkspaceServerCommand(
+    projectPath,
+    options.platform,
+    options.existsSync,
+  );
+  if (nearestWorkspaceCommand) {
+    return {
+      argsPrefix: [],
+      command: nearestWorkspaceCommand,
+      source: 'workspace',
+    };
+  }
+
+  return resolveCliLaunch(options);
 }

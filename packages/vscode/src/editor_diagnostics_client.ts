@@ -395,6 +395,9 @@ export function activateSoundscriptDiagnostics(
     vscode.workspace.onDidSaveTextDocument((document) => {
       schedulePublish(document, 0);
     }),
+    vscode.window.onDidChangeVisibleTextEditors(() => {
+      refreshAll();
+    }),
     vscode.workspace.onDidCloseTextDocument((document) => {
       if (!isSoundscriptDocument(document)) {
         return;

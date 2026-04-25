@@ -112,6 +112,7 @@ class DiagnosticsWorkerConnection implements vscode.Disposable {
     private readonly cwd: string,
     cliLaunch: ResolvedCliLaunch,
     spawnProcess: SpawnDiagnosticsWorker,
+    private readonly onExit?: () => void,
   ) {
     this.childProcess = spawnProcess(cliLaunch.command, [...buildDiagnosticsWorkerArgs(cliLaunch)], {
       cwd,
@@ -129,9 +130,11 @@ class DiagnosticsWorkerConnection implements vscode.Disposable {
       this.outputChannel.appendLine(`[diagnostics-worker] stderr: ${text.trimEnd()}`);
     });
     this.childProcess.on('error', (error) => {
+      this.onExit?.();
       this.rejectAll(error instanceof Error ? error : new Error(String(error)));
     });
     this.childProcess.on('exit', (code, signal) => {
+      this.onExit?.();
       this.rejectAll(new Error(`Diagnostics worker exited (code=${String(code)}, signal=${String(signal)}).`));
     });
   }
@@ -262,6 +265,7 @@ export function activateSoundscriptDiagnostics(
 ): SoundscriptDiagnosticsController {
   const diagnostics = vscode.languages.createDiagnosticCollection('soundscript');
   const workersByProject = new Map<string, DiagnosticsWorkerConnection>();
+  const pendingWorkersByProject = new Map<string, Promise<DiagnosticsWorkerConnection | undefined>>();
   const lastPublishedDiagnostics = new Map<string, readonly WorkerDiagnostic[]>();
   const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const pendingDocuments = new Map<string, vscode.TextDocument>();
@@ -289,15 +293,38 @@ export function activateSoundscriptDiagnostics(
       return existing;
     }
 
-    const worker = new DiagnosticsWorkerConnection(
-      outputChannel,
-      path.dirname(projectPath),
-      cliLaunch,
-      spawnProcess ?? (spawn as unknown as SpawnDiagnosticsWorker),
-    );
-    await worker.initialize();
-    workersByProject.set(key, worker);
-    return worker;
+    const pending = pendingWorkersByProject.get(key);
+    if (pending) {
+      return await pending;
+    }
+
+    const workerPromise = (async () => {
+      let worker: DiagnosticsWorkerConnection | undefined;
+      try {
+        worker = new DiagnosticsWorkerConnection(
+          outputChannel,
+          path.dirname(projectPath),
+          cliLaunch,
+          spawnProcess ?? (spawn as unknown as SpawnDiagnosticsWorker),
+          () => {
+            if (worker && workersByProject.get(key) === worker) {
+              workersByProject.delete(key);
+            }
+            pendingWorkersByProject.delete(key);
+          },
+        );
+        await worker.initialize();
+        workersByProject.set(key, worker);
+        return worker;
+      } catch (error) {
+        worker?.dispose();
+        throw error;
+      } finally {
+        pendingWorkersByProject.delete(key);
+      }
+    })();
+    pendingWorkersByProject.set(key, workerPromise);
+    return await workerPromise;
   }
 
   async function publishDiagnostics(document: vscode.TextDocument): Promise<void> {
@@ -400,6 +427,7 @@ export function activateSoundscriptDiagnostics(
           worker.dispose();
         }
         workersByProject.clear();
+        pendingWorkersByProject.clear();
       },
     },
   );
